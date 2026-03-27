@@ -213,6 +213,37 @@ async function executeTool(
   }
 }
 
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [5_000, 10_000, 20_000];
+
+async function callWithRetry(
+  client: Anthropic,
+  messages: Anthropic.MessageParam[],
+): Promise<Anthropic.Message> {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await client.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096,
+        system: SYSTEM_PROMPT,
+        tools,
+        messages,
+      });
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      const isRetryable = err.status === 529 || err.status === 503 || err.status === 500;
+      if (isRetryable && attempt < MAX_RETRIES) {
+        const delay = RETRY_DELAYS[attempt];
+        console.log(`  ⏳ API過負荷 (${err.status})、${delay / 1000}秒後にリトライ... (${attempt + 1}/${MAX_RETRIES})`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new Error("リトライ上限に達しました");
+}
+
 export async function runAgent(userMessage: string): Promise<string> {
   const client = new Anthropic();
 
@@ -221,13 +252,7 @@ export async function runAgent(userMessage: string): Promise<string> {
   ];
 
   while (true) {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      tools,
-      messages,
-    });
+    const response = await callWithRetry(client, messages);
 
     const textParts = response.content
       .filter((block): block is Anthropic.TextBlock => block.type === "text")
