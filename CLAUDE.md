@@ -62,7 +62,3 @@ npm run typecheck      # TypeScript型チェック（strict mode）
 
 - 開発者向け応答・コミットメッセージは日本語で記述
 
-## 参考
-
-- `refrence.md` — World Bank API (WDI) のリファレンスガイド
-- `plan.md` — 実装計画
